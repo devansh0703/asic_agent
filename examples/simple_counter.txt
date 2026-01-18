@@ -1,0 +1,11 @@
+Design a 4-bit synchronous up counter with clock, reset, and enable inputs.
+
+The counter should:
+- Have inputs: clk (clock), rst (reset), enable
+- Have output: count (4-bit)
+- Reset to 0 when rst is high
+- Increment on each clock edge when enable is high
+- Wrap around from 15 to 0
+- Hold value when enable is low
+
+Use synchronous reset and non-blocking assignments.
