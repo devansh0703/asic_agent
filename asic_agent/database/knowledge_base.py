@@ -41,103 +41,38 @@ class ASICKnowledgeBase:
         # Get or create collection
         try:
             self.collection = self.client.get_collection(name=collection_name)
-            logger.info(f"Loaded existing collection: {collection_name}")
+            doc_count = self.collection.count()
+            logger.info(f"Loaded existing collection: {collection_name} ({doc_count} documents)")
+            
+            # Check if collection is empty and needs initialization
+            if doc_count == 0:
+                logger.warning("Knowledge base is empty! Run 'python scripts/build_knowledge_base.py' to populate with real documentation.")
+                self._initialize_minimal_knowledge()
         except Exception:
             self.collection = self.client.create_collection(
                 name=collection_name,
                 metadata={"description": "ASIC design knowledge base"}
             )
             logger.info(f"Created new collection: {collection_name}")
-            self._initialize_knowledge_base()
+            logger.warning("Knowledge base created but empty. Run 'python scripts/build_knowledge_base.py' to populate with real documentation.")
+            self._initialize_minimal_knowledge()
     
-    def _initialize_knowledge_base(self):
-        """Initialize knowledge base with common ASIC design knowledge"""
+    def _initialize_minimal_knowledge(self):
+        """Initialize with minimal critical knowledge (fallback only - use build_knowledge_base.py for full data)"""
+        logger.info("Initializing minimal fallback knowledge (NOT comprehensive - build full database with scripts/build_knowledge_base.py)")
         
-        # Verilog best practices
-        verilog_docs = [
+        # Minimal critical cocotb 2.0+ API rules
+        minimal_docs = [
             {
-                "id": "verilog_basics",
-                "content": """Verilog Best Practices:
-1. Use `always @(posedge clk)` for synchronous logic
-2. Use `always @(*)` for combinational logic
-3. Declare all signals before use (input, output, reg, wire)
-4. Use non-blocking assignments (<=) in sequential blocks
-5. Use blocking assignments (=) in combinational blocks
-6. Always include reset logic in sequential blocks
-7. Avoid latches by ensuring all paths are covered in combinational logic
-8. Use parameters for configurable values
-9. Add comments for complex logic
-10. Follow consistent naming conventions""",
-                "metadata": {"category": "verilog", "type": "best_practices"}
-            },
-            {
-                "id": "common_verilog_errors",
-                "content": """Common Verilog Errors and Solutions:
-1. Syntax Error: Missing semicolon - Add semicolon at end of statement
-2. Undefined signal - Declare signal as input, output, reg, or wire
-3. Multiple drivers - Ensure signal is driven from only one always block
-4. Latch inference - Cover all conditions in combinational logic
-5. Blocking vs non-blocking - Use <= in sequential, = in combinational
-6. Width mismatch - Ensure signal widths match in assignments
-7. Undeclared module - Check module name spelling and instantiation
-8. Sensitivity list incomplete - Use @(*) for combinational logic""",
-                "metadata": {"category": "verilog", "type": "errors"}
-            },
-        ]
-        
-        # cocotb verification knowledge
-        cocotb_docs = [
-            {
-                "id": "cocotb_basics",
-                "content": """cocotb 2.0+ Testbench Structure (IMPORTANT - THESE ARE THE CORRECT APIS):
-1. Import cocotb and cocotb.triggers
-2. Mark test functions with @cocotb.test() decorator
-3. Use async/await for test coroutines
-4. Access DUT signals: dut.signal_name.value
-5. Drive inputs: dut.input_signal.value = value
-6. Read outputs: value = dut.output_signal.value (use int() to convert)
-7. Use Clock() to drive clock signals
-8. Use await Timer() for delays
-9. Use await RisingEdge(clk) or FallingEdge(clk) for synchronization
-10. Assert expected values: assert int(dut.output.value) == expected
+                "id": "cocotb_critical_api",
+                "content": """CRITICAL cocotb 2.0+ API Rules:
+1. NEVER import 'cocotb.log' - doesn't exist in 2.0+
+2. Use Python's standard logging: import logging; log = logging.getLogger(__name__)
+3. Convert signal values: int(dut.signal.value)
+4. After every await RisingEdge(dut.clk), add await Timer(1, units="ns")
+5. Counter timing: after reset release, first clock makes count=1 (not 0!)
 
-CRITICAL COCOTB 2.0+ API CHANGES:
-- NEVER import 'cocotb.log' - it doesn't exist in 2.0+
-- Use Python's logging module instead: import logging; log = logging.getLogger(__name__)
-- NEVER use SimLog() - replaced by standard logging
-- NEVER use cocotb.log.getLogger() - use logging.getLogger() instead
-- Convert signal values with int(): int(dut.signal.value) for comparisons
-- Use cocotb.log.info() becomes log.info() with standard logging
-
-CRITICAL TIMING AFTER RESET (COUNTERS AND SEQUENTIAL LOGIC):
-For a counter with synchronous reset, the sequence is:
-1. dut.reset.value = 1; await RisingEdge(clk); await Timer(1, "ns")  → count = 0
-2. dut.reset.value = 0  → prepare to start counting
-3. await RisingEdge(clk); await Timer(1, "ns")  → count = 1 (incremented!)
-4. await RisingEdge(clk); await Timer(1, "ns")  → count = 2
-
-COMMON MISTAKE: Expecting count=0 after reset release + 1 clock
-CORRECT: After reset release, first clock edge makes count=1 (it counts!)
-
-Counter Test Pattern:
-```python
-dut.reset.value = 1
-await RisingEdge(dut.clk)
-await Timer(1, units="ns")
-# count is 0 here
-
-dut.reset.value = 0
-# Don't check yet! Counter will increment on next edge
-for i in range(1, 5):  # Start from 1, not 0!
-    await RisingEdge(dut.clk)
-    await Timer(1, units="ns")
-    assert int(dut.count.value) == i  # i = 1, 2, 3, 4
-```""",
-                "metadata": {"category": "cocotb", "type": "best_practices"}
-            },
-            {
-                "id": "cocotb_example",
-                "content": """Example cocotb 2.0+ Testbench (CORRECT VERSION):
+Example:
 ```python
 import cocotb
 from cocotb.clock import Clock
@@ -147,121 +82,35 @@ import logging
 log = logging.getLogger(__name__)
 
 @cocotb.test()
-async def test_counter(dut):
-    # Start clock
+async def test_example(dut):
     clock = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clock.start())
     
-    # CRITICAL SYNCHRONOUS RESET TIMING:
-    # Must wait for delta cycles after RisingEdge before checking values!
     dut.rst.value = 1
-    await RisingEdge(dut.clk)  # Reset asserted ON this edge
-    await Timer(1, units="ns")  # CRITICAL: Wait for delta cycles!
-    
-    # NOW safe to check reset value
-    assert int(dut.count.value) == 0, "Reset failed"
+    await RisingEdge(dut.clk)
+    await Timer(1, units="ns")  # CRITICAL
     
     dut.rst.value = 0
-    # DO NOT clock yet! Counter is at 0 right now.
-    # First clock edge AFTER reset release will make it 1!
-    
-    log.info("Testing counter sequence")
-    
-    # CORRECT counter test pattern - counter starts at 0, will increment
-    # Expected sequence: 0 (reset) → 1 (first clock) → 2 (second clock) → ...
-    for expected in range(16):  # Test counts 0-15
-        await RisingEdge(dut.clk)
-        await Timer(1, units="ns")  # Wait for signal to update!
-        actual = int(dut.count.value)
-        assert actual == expected, f"Expected {expected}, got {actual}"
-        log.info(f"Count = {actual}")
+    await RisingEdge(dut.clk)
+    await Timer(1, units="ns")  # CRITICAL
 ```
 
-CRITICAL UNDERSTANDING - COUNTER TESTING:
-1. After reset: count = 0
-2. Release reset (rst=0) - count STILL 0
-3. First clock edge → count = 1 (NOT 0!)
-4. Second clock edge → count = 2
-5. Pattern: for expected in range(N) works because we clock THEN check
-
-WRONG PATTERN (COMMON MISTAKE):
-```python
-# BAD - expects count=0 after reset release + clock
-dut.rst.value = 0
-await RisingEdge(dut.clk)
-await Timer(1, units="ns")
-assert int(dut.count.value) == 0  # WRONG! Counter incremented to 1!
-```
-
-WHY Timer(1, units="ns") IS REQUIRED:
-- Synchronous logic updates ON the clock edge
-- await RisingEdge() returns WHEN edge occurs, but before signals update
-- Signals update in NEXT delta cycle
-- Timer(1, units="ns") waits for delta cycles to complete
-- ALWAYS use: await RisingEdge(dut.clk); await Timer(1, units="ns")
-
-NEVER DO THIS (OLD cocotb API):
-```python
-# WRONG - DO NOT USE:
-from cocotb.log import SimLog  # Module doesn't exist!
-log = SimLog("test")  # WRONG!
-log = cocotb.log.getLogger()  # WRONG!
-
-# WRONG - Missing Timer after RisingEdge:
-await RisingEdge(dut.clk)
-value = int(dut.signal.value)  # May get old value!
-
-# CORRECT:
-await RisingEdge(dut.clk)
-await Timer(1, units="ns")  # Wait for delta cycles
-value = int(dut.signal.value)  # Gets new value
-```""",
-                "metadata": {"category": "cocotb", "type": "example"}
-            },
+WARNING: This is minimal fallback data. Build full knowledge base with:
+python scripts/build_knowledge_base.py
+""",
+                "metadata": {"category": "cocotb", "type": "critical", "minimal": True}
+            }
         ]
         
-        # OpenLane knowledge
-        openlane_docs = [
-            {
-                "id": "openlane_config",
-                "content": """OpenLane Configuration Basics:
-1. DESIGN_NAME - Name of the top module
-2. VERILOG_FILES - List of Verilog source files
-3. CLOCK_PORT - Clock signal name
-4. CLOCK_PERIOD - Target clock period in ns
-5. DIE_AREA - Die dimensions "0 0 width height"
-6. FP_PDN_VPITCH - Power grid vertical pitch
-7. FP_PDN_HPITCH - Power grid horizontal pitch
-8. FP_SIZING - absolute or relative
-9. PL_TARGET_DENSITY - Target placement density (0.0-1.0)
-10. SYNTH_STRATEGY - Synthesis strategy (AREA or DELAY)""",
-                "metadata": {"category": "openlane", "type": "configuration"}
-            },
-            {
-                "id": "openlane_errors",
-                "content": """Common OpenLane Errors:
-1. "Design has no clock" - Set CLOCK_PORT in config
-2. "Timing violation" - Increase CLOCK_PERIOD or adjust constraints
-3. "DRC violation" - Adjust routing parameters or die size
-4. "Antenna violation" - Enable diode insertion
-5. "Power grid failure" - Adjust FP_PDN parameters
-6. "Placement failure" - Increase die area or reduce density
-7. "Synthesis fails" - Check Verilog syntax and module names""",
-                "metadata": {"category": "openlane", "type": "errors"}
-            },
-        ]
-        
-        # Add all documents
-        all_docs = verilog_docs + cocotb_docs + openlane_docs
-        
-        for doc in all_docs:
-            self.add_document(
-                doc_id=doc["id"],
-                content=doc["content"],
-                metadata=doc["metadata"]
-            )
-        
-        logger.info(f"Initialized knowledge base with {len(all_docs)} documents")
+        for doc in minimal_docs:
+            try:
+                self.collection.add(
+                    ids=[doc["id"]],
+                    documents=[doc["content"]],
+                    metadatas=[doc["metadata"]]
+                )
+            except Exception as e:
+                logger.error(f"Failed to add minimal doc: {e}")
     
     def add_document(
         self,
@@ -392,5 +241,5 @@ value = int(dut.signal.value)  # Gets new value
             name=self.collection_name,
             metadata={"description": "ASIC design knowledge base"}
         )
-        self._initialize_knowledge_base()
+        logger.warning("Knowledge base reset. Run 'python scripts/build_knowledge_base.py' to populate from web sources.")
         logger.info("Knowledge base reset")

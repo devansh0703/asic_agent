@@ -113,7 +113,7 @@ Caravel Integration Configuration:"""
         design_gds: str,
         config: str,
     ) -> Tuple[bool, str]:
-        """Integrate design into Caravel (simulated)
+        """Integrate design into Caravel using real git clone
         
         Args:
             design_gds: Path to user design GDS

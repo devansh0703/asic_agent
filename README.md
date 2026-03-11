@@ -77,13 +77,33 @@ cd asic-agent
 pip install -r requirements.txt
 ```
 
-### 3. Set Up API Key
+### 3. Build Knowledge Base from Real Documentation
+
+**CRITICAL**: Build the knowledge base with real scraped documentation:
+
+```bash
+# Automated setup (recommended)
+./scripts/setup_knowledge_base.sh
+
+# OR manual build
+python3 scripts/build_knowledge_base.py
+```
+
+This scrapes REAL documentation from:
+- cocotb official docs (docs.cocotb.org)
+- cocotb GitHub examples
+- OpenLane documentation
+- Curated Verilog patterns
+
+Takes ~30-60 seconds, creates `chroma_db/` with vector database.
+
+### 4. Set Up API Key
 ```bash
 echo 'export OPENROUTER_API_KEY="sk-or-v1-..."' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 4. First Run (Downloads Sky130 PDK ~2.4GB)
+### 5. First Run (Downloads Sky130 PDK ~2.4GB)
 ```bash
 python3 main.py "Design a 4-bit counter" --name counter4bit
 ```
